@@ -49,4 +49,13 @@ export default {
     secretKey: process.env.STRIPE_SECRET_KEY,
     webhookSecret: process.env.STRIPE_WEBHOOK_SECRET,
   },
+  onOffice: {
+    apiUrl:
+      process.env.ONOFFICE_API_URL ||
+      'https://api.onoffice.de/api/stable/api.php',
+    estateToken: process.env.ONOFFICE_ESTATE_TOKEN,
+    estateSecret: process.env.ONOFFICE_ESTATE_SECRET,
+    pictureToken: process.env.ONOFFICE_PICTURE_TOKEN,
+    pictureSecret: process.env.ONOFFICE_PICTURE_SECRET,
+  },
 };

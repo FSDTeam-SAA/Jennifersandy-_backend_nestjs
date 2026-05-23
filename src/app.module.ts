@@ -11,6 +11,9 @@ import { DashboardModule } from './app/module/dashboard/dashboard.module';
 import { SubscribeModule } from './app/module/subscribe/subscribe.module';
 import { PaymentModule } from './app/module/payment/payment.module';
 import { WebhookModule } from './app/module/webhook/webhook.module';
+import { CrmModule } from './app/module/crm/crm.module';
+import { ProductModule } from './app/module/product/product.module';
+import { OnofficeModule } from './app/module/onoffice/onoffice.module';
 
 @Module({
   imports: [
@@ -23,6 +26,9 @@ import { WebhookModule } from './app/module/webhook/webhook.module';
     SubscribeModule,
     PaymentModule,
     WebhookModule,
+    ProductModule,
+    CrmModule,
+    OnofficeModule,
   ],
   controllers: [AppController],
   providers: [AppService],
