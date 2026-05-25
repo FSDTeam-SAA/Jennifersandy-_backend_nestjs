@@ -6,9 +6,12 @@ import {
   HttpCode,
   HttpStatus,
   Param,
+  Req,
 } from '@nestjs/common';
 import { OnofficeService } from './onoffice.service';
 import { ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
+import type { Request } from 'express';
+import pick from 'src/app/helpers/pick';
 
 @ApiTags('onoffice')
 @Controller('onoffice')
@@ -18,22 +21,72 @@ export class OnofficeController {
   // DB থেকে fast get
   @Get('estates')
   @ApiOperation({ summary: 'Get all estates from DB (fast)' })
-  @ApiQuery({ name: 'page', required: false, type: Number, example: 0 })
-  @ApiQuery({ name: 'limit', required: false, type: Number, example: 20 })
+  @ApiQuery({ name: 'sortBy', required: false, type: String })
+  @ApiQuery({ name: 'sortOrder', required: false, enum: ['asc', 'desc'] })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  @ApiQuery({ name: 'searchTerm', required: false, type: String })
+  @ApiQuery({ name: 'status', required: false, type: String })
+  @ApiQuery({ name: 'objekttyp', required: false, type: String })
+  @ApiQuery({ name: 'vermarktungsart', required: false, type: String })
+  @ApiQuery({ name: 'anzahl_zimmer', required: false, type: Number })
+  @ApiQuery({ name: 'anzahl_badezimmer', required: false, type: Number })
+  @ApiQuery({ name: 'wohnflaeche', required: false, type: Number })
+  @ApiQuery({ name: 'ort', required: false, type: String })
+  @ApiQuery({ name: 'plz', required: false, type: Number })
+  @ApiQuery({ name: 'strasse', required: false, type: String })
+  @ApiQuery({ name: 'hausnummer', required: false, type: String })
+  @ApiQuery({ name: 'breitengrad', required: false, type: Number })
+  @ApiQuery({ name: 'laengengrad', required: false, type: Number })
+  @ApiQuery({ name: 'objektart', required: false, type: String })
+  @ApiQuery({ name: 'objektbeschreibung', required: false, type: String })
+  @ApiQuery({ name: 'lage', required: false, type: String })
+  @ApiQuery({ name: 'veroeffentlichen', required: false, type: String })
+  @ApiQuery({ name: 'balkon', required: false, type: String })
+  @ApiQuery({ name: 'terrasse', required: false, type: String })
+  @ApiQuery({ name: 'fahrstuhl', required: false, type: String })
   @HttpCode(HttpStatus.OK)
-  async getEstates(
-    @Query('page') page: number = 0,
-    @Query('limit') limit: number = 20,
-  ) {
+  async getEstates(@Req() req: Request) {
+    const filters = pick(req.query, [
+      'searchTerm',
+      'status',
+      'objekttyp',
+      'vermarktungsart',
+      'anzahl_zimmer',
+      'anzahl_badezimmer',
+      'wohnflaeche',
+      'ort',
+      'plz',
+      'strasse',
+      'hausnummer',
+      'breitengrad',
+      'laengengrad',
+      'objektart',
+      'objektbeschreibung',
+      'lage',
+      'veroeffentlichen',
+      'balkon',
+      'terrasse',
+      'fahrstuhl',
+    ]);
+    const options = pick(req.query, ['page', 'limit', 'sortBy', 'sortOrder']);
     const result = await this.onofficeService.getEstatesFromDB(
-      Number(page),
-      Number(limit),
+      filters,
+      options,
     );
     return {
       message: 'Estates fetched successfully',
       meta: result.meta,
       data: result.data,
     };
+  }
+
+  @Get(':id')
+  @ApiOperation({ summary: 'Get single estate from DB by id' })
+  @HttpCode(HttpStatus.OK)
+  async getSingleEstate(@Param('id') id: string) {
+    const result = await this.onofficeService.getSingleEstateFromDB(id);
+    return { message: 'Estate fetched successfully', data: result };
   }
 
   // Single estate by onofficeId

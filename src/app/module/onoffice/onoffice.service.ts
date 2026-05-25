@@ -6,6 +6,10 @@ import { createHmac } from 'crypto';
 import { firstValueFrom } from 'rxjs';
 import { Onoffice } from './entities/onoffice.entity';
 import { SyncOnOfficeProductsDto } from './dto/syncOnOfficeProducts.dto';
+import { IFilterParams } from 'src/app/helpers/pick';
+import paginationHelper, { IOptions } from 'src/app/helpers/pagenation';
+import buildWhereConditions from 'src/app/helpers/buildWhereConditions';
+import { UpdateOnofficeDto } from './dto/update-onoffice.dto';
 
 @Injectable()
 export class OnofficeService {
@@ -243,18 +247,62 @@ export class OnofficeService {
   }
 
   // ─── Get from DB (fast, no API call) ───────────────────────────────────────
-  async getEstatesFromDB(page: number = 0, limit: number = 20) {
-    const skip = page * limit;
+  async getEstatesFromDB(params: IFilterParams, options: IOptions) {
+    const { limit, page, skip, sortBy, sortOrder } = paginationHelper(options);
+    const whereConditions = buildWhereConditions(params, [
+      'objekttitel',
+      'objektbeschreibung',
+      'lage',
+      'wohnflaeche',
+      'anzahl_zimmer',
+      'anzahl_badezimmer',
+      'kaltmiete',
+      'warmmiete',
+      'kaufpreis',
+      'vermarktungsart',
+      'objektart',
+      'ort',
+      'plz',
+      'strasse',
+      'hausnummer',
+      'breitengrad',
+      'laengengrad',
+      'balkon',
+      'terrasse',
+      'fahrstuhl',
+      'status',
+      'veroeffentlichen',
+      'availableFrom',
+      'minimumStay',
+      'deposit',
+      'serviceFee',
+    ]);
     const [data, total] = await Promise.all([
-      this.onofficeModel.find().skip(skip).limit(limit).sort({ syncedAt: -1 }),
-      this.onofficeModel.countDocuments(),
+      this.onofficeModel
+        .find(whereConditions)
+        .skip(skip)
+        .limit(limit)
+        .sort({ [sortBy]: sortOrder } as any),
+      this.onofficeModel.countDocuments(whereConditions),
     ]);
 
     return { data, meta: { total, page, limit } };
   }
 
+  async getSingleEstateFromDB(id: string) {
+    const result = await this.onofficeModel.findById(id);
+    if (!result) throw new HttpException('Estate not found', 404);
+    return result;
+  }
+
   async getEstateByIdFromDB(onofficeId: number) {
     const result = await this.onofficeModel.findOne({ onofficeId });
+    if (!result) throw new HttpException('Estate not found', 404);
+    return result;
+  }
+
+  async updateEstate(id:string, updateEstate:UpdateOnofficeDto){
+    const result = await this.onofficeModel.findByIdAndUpdate(id, updateEstate, {new: true});
     if (!result) throw new HttpException('Estate not found', 404);
     return result;
   }
