@@ -6,25 +6,25 @@ export type InquiryDocument = HydratedDocument<Inquiry>;
 @Schema({ timestamps: true })
 export class Inquiry {
   @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'User' })
-  user: Types.ObjectId;
+  user!: Types.ObjectId;
 
   @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'Onoffice' })
-  onOfficeId: Types.ObjectId;
+  onOfficeId!: Types.ObjectId;
 
   @Prop()
-  firstName: string;
+  firstName!: string;
 
   @Prop()
-  lastName: string;
+  lastName!: string;
 
   @Prop()
-  email: string;
+  email!: string;
 
   @Prop()
-  phoneNumber: string;
+  phoneNumber!: string;
 
   @Prop()
-  message: string;
+  message!: string;
 }
 
 export const InquirySchema = SchemaFactory.createForClass(Inquiry);

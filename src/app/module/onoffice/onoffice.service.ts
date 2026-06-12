@@ -12,6 +12,9 @@ import { UpdateOnofficeDto } from './dto/update-onoffice.dto';
 
 @Injectable()
 export class OnofficeService {
+  // Cached field definitions from onOffice (populated once per sync)
+  private fieldDefs: Record<string, any> = {};
+
   constructor(
     private readonly httpService: HttpService,
     @InjectModel(Onoffice.name)
@@ -54,6 +57,52 @@ export class OnofficeService {
     return isNaN(n) ? 0 : n;
   }
 
+  // Any value (including arrays) → safe string
+  private toStr(val: any): string {
+    if (val == null || val === '') return '';
+    if (Array.isArray(val)) return val.join(', ');
+    return String(val);
+  }
+
+  // Translate onOffice internal key(s) → human-readable label using permittedvalues
+  private resolveLabel(fieldName: string, value: any): string {
+    if (value == null || value === '') return '';
+    const arr = Array.isArray(value) ? value : [value];
+    const permitted: Record<string, string> = this.fieldDefs[fieldName]?.permittedvalues ?? {};
+    return arr.map((k) => permitted[k] ?? String(k)).join(', ');
+  }
+
+  // Load field definitions from onOffice and cache them in this.fieldDefs
+  private async loadFieldDefinitions(): Promise<string[]> {
+    const { token, secret } = this.getCredentials();
+    const timestamp = Math.floor(Date.now() / 1000);
+    const actionId = 'urn:onoffice-de-ns:smart:2.5:smartml:action:get';
+    const hmac = this.generateHmac(timestamp, token, 'fields', actionId, secret);
+
+    const res = await firstValueFrom(
+      this.httpService.post('https://api.onoffice.de/api/stable/api.php', {
+        token,
+        request: {
+          actions: [{
+            actionid: actionId,
+            resourceid: '',
+            identifier: 'get-fields',
+            resourcetype: 'fields',
+            timestamp,
+            hmac,
+            hmac_version: '2',
+            parameters: { modules: ['estate'], labels: true, language: 'ENG' },
+          }],
+        },
+      }),
+    );
+
+    const records = res.data?.response?.results?.[0]?.data?.records || [];
+    const estateModule = records.find((r: any) => r.id === 'estate');
+    this.fieldDefs = estateModule?.elements ?? {};
+    return Object.keys(this.fieldDefs);
+  }
+
   // ─── Auto sync every 10 minutes ─────────────────────────────────────────────
   @Cron(CronExpression.EVERY_10_MINUTES)
   async autoSync() {
@@ -66,6 +115,12 @@ export class OnofficeService {
     }
   }
 
+  // ─── Get all available estate fields (also used by debug endpoint) ──────────
+  async getAvailableEstateFields(): Promise<{ fields: string[]; defs: Record<string, any> }> {
+    const fields = await this.loadFieldDefinitions();
+    return { fields, defs: this.fieldDefs };
+  }
+
   // ─── Full sync: fetches ALL properties in one call ──────────────────────────
   async fullSync() {
     const { token, secret, pictureToken, pictureSecret } = this.getCredentials();
@@ -75,6 +130,33 @@ export class OnofficeService {
 
     const estateHmac = this.generateHmac(timestamp, token, 'estate', estateActionId, secret);
     const imageHmac = this.generateHmac(timestamp, pictureToken, 'estatepictures', imageActionId, pictureSecret);
+
+    // Step 0: load field definitions (populates this.fieldDefs + returns available keys)
+    const availableFields = await this.loadFieldDefinitions();
+
+    const desiredFields = [
+      'Id',
+      'objekttitel', 'objektart', 'objekttyp',
+      'kaltmiete', 'warmmiete', 'kaufpreis', 'kaution', 'nebenkosten',
+      'anzahl_zimmer', 'anzahl_badezimmer', 'anzahl_schlafzimmer',
+      'wohnflaeche',
+      'ort', 'plz', 'strasse', 'hausnummer',
+      'stadtteil', 'regionaler_zusatz',   // both — whichever exists
+      'breitengrad', 'laengengrad',
+      'objektbeschreibung', 'lage', 'ausstatt_beschr',
+      'vermarktungsart', 'status', 'veroeffentlichen', 'verfuegbar_ab',
+      'balkon', 'terrasse', 'fahrstuhl', 'moebliert', 'haustiere',
+    ];
+
+    // 'Id' is always valid; skip availability check for it
+    const data = desiredFields.filter(
+      (f) => f === 'Id' || availableFields.includes(f),
+    );
+
+    const missing = desiredFields.filter((f) => f !== 'Id' && !availableFields.includes(f));
+    if (missing.length) {
+      console.warn('[Sync] Fields not available in this onOffice account, skipped:', missing.join(', '));
+    }
 
     // Step 1: fetch all published estates
     const estateResponse = await firstValueFrom(
@@ -91,40 +173,7 @@ export class OnofficeService {
               hmac: estateHmac,
               hmac_version: '2',
               parameters: {
-                data: [
-                  'Id',
-                  'objekttitel',
-                  'objektart',
-                  'objekttyp',
-                  'kaltmiete',
-                  'warmmiete',
-                  'kaufpreis',
-                  'kaution',
-                  'nebenkosten',
-                  'anzahl_zimmer',
-                  'anzahl_badezimmer',
-                  'anzahl_schlafzimmer',
-                  'wohnflaeche',
-                  'ort',
-                  'plz',
-                  'strasse',
-                  'hausnummer',
-                  'stadtteil',
-                  'breitengrad',
-                  'laengengrad',
-                  'objektbeschreibung',
-                  'lage',
-                  'ausstatt_beschr',
-                  'vermarktungsart',
-                  'status',
-                  'veroeffentlichen',
-                  'verfuegbar_ab',
-                  'balkon',
-                  'terrasse',
-                  'fahrstuhl',
-                  'moebliert',
-                  'haustiere',
-                ],
+                data,
                 listlimit: 500,
                 listoffset: 0,
                 filter: {
@@ -202,19 +251,17 @@ export class OnofficeService {
         if (!isNaN(parsed.getTime())) verfuegbar = parsed;
       }
 
-      const fahrstuhl = Array.isArray(el.fahrstuhl) ? el.fahrstuhl.join(',') : String(el.fahrstuhl ?? '');
-
       try {
         await this.onofficeModel.findOneAndUpdate(
           { onofficeId: id },
           {
             $set: {
               onofficeId: id,
-              slug: this.generateSlug(el.objekttitel, id),
-              objekttitel: el.objekttitel ?? '',
-              objektbeschreibung: el.objektbeschreibung ?? '',
-              lage: el.lage ?? '',
-              ausstatt_beschr: el.ausstatt_beschr ?? '',
+              slug: this.generateSlug(this.toStr(el.objekttitel), id),
+              objekttitel: this.toStr(el.objekttitel),
+              objektbeschreibung: this.toStr(el.objektbeschreibung),
+              lage: this.toStr(el.lage),
+              ausstatt_beschr: this.toStr(el.ausstatt_beschr),
               wohnflaeche: this.toNum(el.wohnflaeche),
               anzahl_zimmer: this.toNum(el.anzahl_zimmer),
               anzahl_badezimmer: this.toNum(el.anzahl_badezimmer),
@@ -224,23 +271,27 @@ export class OnofficeService {
               kaufpreis: this.toNum(el.kaufpreis),
               kaution: this.toNum(el.kaution),
               nebenkosten: this.toNum(el.nebenkosten),
-              vermarktungsart: el.vermarktungsart ?? '',
-              objektart: el.objektart ?? '',
-              objekttyp: el.objekttyp ?? '',
-              ort: el.ort ?? '',
-              plz: el.plz ?? '',
-              strasse: el.strasse ?? '',
-              hausnummer: el.hausnummer ?? '',
-              stadtteil: el.stadtteil ?? '',
+              // Select/multiselect fields — translate internal keys to labels
+              vermarktungsart: this.resolveLabel('vermarktungsart', el.vermarktungsart),
+              objektart: this.resolveLabel('objektart', el.objektart),
+              objekttyp: this.resolveLabel('objekttyp', el.objekttyp),
+              status: this.resolveLabel('status', el.status),
+              balkon: this.resolveLabel('balkon', el.balkon),
+              terrasse: this.resolveLabel('terrasse', el.terrasse),
+              fahrstuhl: this.resolveLabel('fahrstuhl', el.fahrstuhl),
+              moebliert: this.resolveLabel('moebliert', el.moebliert),
+              haustiere: this.resolveLabel('haustiere', el.haustiere),
+              veroeffentlichen: this.toStr(el.veroeffentlichen),
+              // District: try stadtteil first, then regionaler_zusatz (both with label resolution)
+              stadtteil:
+                this.resolveLabel('stadtteil', el.stadtteil) ||
+                this.resolveLabel('regionaler_zusatz', el.regionaler_zusatz),
+              ort: this.toStr(el.ort),
+              plz: this.toStr(el.plz),
+              strasse: this.toStr(el.strasse),
+              hausnummer: this.toStr(el.hausnummer),
               breitengrad: el.breitengrad ? this.toNum(el.breitengrad) : null,
               laengengrad: el.laengengrad ? this.toNum(el.laengengrad) : null,
-              balkon: el.balkon ?? '',
-              terrasse: el.terrasse ?? '',
-              fahrstuhl,
-              moebliert: el.moebliert ?? '',
-              haustiere: el.haustiere ?? '',
-              status: el.status ?? '',
-              veroeffentlichen: el.veroeffentlichen ?? '',
               verfuegbar_ab: verfuegbar,
               images,
               titleImage,
@@ -258,19 +309,19 @@ export class OnofficeService {
       }
     }
 
-    // Step 4: deactivate properties no longer published in CRM
-    const deactivateResult = await this.onofficeModel.updateMany(
-      { onofficeId: { $nin: syncedIds }, isActive: true },
-      { $set: { isActive: false } },
-    );
+    // Step 4: deactivate only if sync succeeded — guard against wiping DB on API failure
+    let deactivated = 0;
+    if (syncedIds.length > 0) {
+      const r = await this.onofficeModel.updateMany(
+        { onofficeId: { $nin: syncedIds }, isActive: true },
+        { $set: { isActive: false } },
+      );
+      deactivated = r.modifiedCount;
+    } else {
+      console.warn('[Sync] No properties synced — skipping deactivation to protect existing data.');
+    }
 
-    return {
-      total,
-      synced,
-      errors,
-      deactivated: deactivateResult.modifiedCount,
-      syncedAt: new Date(),
-    };
+    return { total, synced, errors, deactivated, syncedAt: new Date() };
   }
 
   // ─── Manual sync endpoint (admin) — delegates to fullSync ───────────────────

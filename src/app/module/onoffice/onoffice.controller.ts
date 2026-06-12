@@ -28,6 +28,17 @@ import { UpdateOnofficeDto } from './dto/update-onoffice.dto';
 export class OnofficeController {
   constructor(private readonly onofficeService: OnofficeService) {}
 
+  // ─── Debug: list all available fields in this onOffice account (admin) ─────
+  @Get('fields')
+  @ApiOperation({ summary: 'List all available estate fields in this onOffice account (admin/debug)' })
+  @ApiBearerAuth('access-token')
+  @UseGuards(AuthGuard('admin'))
+  @HttpCode(HttpStatus.OK)
+  async getAvailableFields() {
+    const { fields, defs } = await this.onofficeService.getAvailableEstateFields();
+    return { count: fields.length, fields, defs };
+  }
+
   // ─── Map pins (all active properties with coordinates) ──────────────────────
   @Get('estates/map')
   @ApiOperation({ summary: 'Get lightweight map pins for all active estates' })
