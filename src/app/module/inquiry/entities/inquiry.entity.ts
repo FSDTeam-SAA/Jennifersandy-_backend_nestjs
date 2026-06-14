@@ -25,6 +25,9 @@ export class Inquiry {
 
   @Prop()
   message!: string;
+
+  @Prop({ default: 'new' })
+  status!: string;
 }
 
 export const InquirySchema = SchemaFactory.createForClass(Inquiry);

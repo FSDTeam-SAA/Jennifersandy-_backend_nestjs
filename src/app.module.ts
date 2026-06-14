@@ -14,6 +14,7 @@ import { InquiryModule } from './app/module/inquiry/inquiry.module';
 import { BlogModule } from './app/module/blog/blog.module';
 import { LandlordModule } from './app/module/landlord/landlord.module';
 import { FaqModule } from './app/module/faq/faq.module';
+import { DashboardModule } from './app/module/dashboard/dashboard.module';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { FaqModule } from './app/module/faq/faq.module';
     BlogModule,
     LandlordModule,
     FaqModule,
+    DashboardModule,
   ],
   controllers: [AppController],
   providers: [AppService],

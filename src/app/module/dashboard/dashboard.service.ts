@@ -4,6 +4,12 @@ import { InjectModel } from '@nestjs/mongoose';
 import { User, UserDocument } from '../user/entities/user.entity';
 import { Model } from 'mongoose';
 import { Payment, PaymentDocument } from '../payment/entities/payment.entity';
+import {
+  Onoffice,
+  OnofficeDocument,
+} from '../onoffice/entities/onoffice.entity';
+import { Inquiry, InquiryDocument } from '../inquiry/entities/inquiry.entity';
+import { Blog, BlogDocument } from '../blog/entities/blog.entity';
 
 @Injectable()
 export class DashboardService {
@@ -11,6 +17,12 @@ export class DashboardService {
     @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
     @InjectModel(Payment.name)
     private readonly paymentModel: Model<PaymentDocument>,
+    @InjectModel(Onoffice.name)
+    private readonly onofficeModel: Model<OnofficeDocument>,
+    @InjectModel(Inquiry.name)
+    private readonly inquiryModel: Model<InquiryDocument>,
+    @InjectModel(Blog.name)
+    private readonly blogModel: Model<BlogDocument>,
   ) {}
 
   async dashboardOverView() {
@@ -22,25 +34,18 @@ export class DashboardService {
       status: 'suspended',
     });
 
-    const totalEarning = await this.paymentModel.aggregate([
-      {
-        $match: {
-          status: 'completed',
-        },
-      },
-      {
-        $group: {
-          _id: null,
-          total: { $sum: '$amount' },
-        },
-      },
-    ]);
+    const totalApartment = await this.onofficeModel.countDocuments();
+    const newEnquiry = await this.inquiryModel.countDocuments({ status: 'new' });
+    const blogpost = await this.blogModel.countDocuments();
+
 
     return {
       totalUser,
       activeUser,
       suspended,
-      totalEarning: totalEarning[0]?.total || 0,
+      totalApartment,
+      newEnquiry,
+      blogpost,
     };
   }
 
