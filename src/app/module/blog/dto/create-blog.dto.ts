@@ -1,5 +1,11 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsArray, IsBoolean, IsDateString, IsOptional, IsString } from 'class-validator';
+import {
+  IsArray,
+  IsBoolean,
+  IsDateString,
+  IsOptional,
+  IsString,
+} from 'class-validator';
 import { Transform } from 'class-transformer';
 
 export class CreateBlogDto {
@@ -16,7 +22,9 @@ export class CreateBlogDto {
   @IsString()
   excerpt?: string;
 
-  @ApiPropertyOptional({ example: '<p>Full article HTML/Markdown content here...</p>' })
+  @ApiPropertyOptional({
+    example: '<p>Full article HTML/Markdown content here...</p>',
+  })
   @IsOptional()
   @IsString()
   content?: string;
@@ -29,7 +37,22 @@ export class CreateBlogDto {
   @ApiPropertyOptional({ example: ['düsseldorf', 'tips', 'expat'] })
   @IsOptional()
   @IsArray()
-  @Transform(({ value }) => (typeof value === 'string' ? JSON.parse(value) : value))
+  @Transform(({ value }) => {
+    if (!value || (typeof value === 'string' && value.trim() === '')) return [];
+    if (typeof value === 'string') {
+      try {
+        const parsed = JSON.parse(value);
+        return Array.isArray(parsed) ? parsed : [parsed];
+      } catch {
+        // treat a plain comma-separated string as fallback: "a,b,c" → ["a","b","c"]
+        return value
+          .split(',')
+          .map((s: string) => s.trim())
+          .filter(Boolean);
+      }
+    }
+    return value;
+  })
   tags?: string[];
 
   @ApiPropertyOptional({ example: 'Jenny Fischer' })
@@ -45,6 +68,8 @@ export class CreateBlogDto {
   @ApiPropertyOptional({ example: true })
   @IsOptional()
   @IsBoolean()
-  @Transform(({ value }) => (typeof value === 'string' ? value === 'true' : value))
+  @Transform(({ value }) =>
+    typeof value === 'string' ? value === 'true' : value,
+  )
   isPublished?: boolean;
 }
