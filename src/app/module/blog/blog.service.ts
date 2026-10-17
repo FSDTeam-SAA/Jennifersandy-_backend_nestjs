@@ -8,6 +8,14 @@ import { fileUpload } from 'src/app/helpers/fileUploder';
 import { IFilterParams } from 'src/app/helpers/pick';
 import paginationHelper, { IOptions } from 'src/app/helpers/pagenation';
 
+// Confirmed incident marker in the preserved 2026-10-16 evidence snapshot.
+// Hide only matching spam from public reads; leave records available to admins.
+const incidentMarker = /sitehack\.happening831@passinbox\.com/i;
+const publicBlogConditions = () => ({
+  isPublished: true,
+  $nor: [{ title: incidentMarker }, { excerpt: incidentMarker }, { content: incidentMarker }],
+});
+
 @Injectable()
 export class BlogService {
   constructor(@InjectModel(Blog.name) private blogModel: Model<BlogDocument>) {}
@@ -42,10 +50,10 @@ export class BlogService {
     return newBlog.save();
   }
 
-  async findAllBlogs(params: IFilterParams, options: IOptions) {
+  async findAllBlogs(params: IFilterParams, options: IOptions, adminView = false) {
     const { limit, page, skip, sortBy, sortOrder } = paginationHelper(options);
 
-    const conditions: Record<string, any> = { isPublished: true };
+    const conditions: Record<string, any> = adminView ? {} : publicBlogConditions();
 
     if (params.searchTerm) {
       const regex = new RegExp(
@@ -81,7 +89,7 @@ export class BlogService {
   }
 
   async findBlogBySlug(slug: string) {
-    const result = await this.blogModel.findOne({ slug, isPublished: true });
+    const result = await this.blogModel.findOne({ slug, ...publicBlogConditions() });
     if (!result) throw new HttpException('Blog not found', 404);
     return result;
   }

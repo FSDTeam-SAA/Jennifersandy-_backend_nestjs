@@ -86,6 +86,7 @@ export class AuthController {
     const result = await this.authService.resetPasswordChange(
       CreateAuthDto.email,
       CreateAuthDto.newPassword,
+      CreateAuthDto.resetToken,
     );
     return {
       message: 'Password changed successfully',
@@ -103,7 +104,6 @@ export class AuthController {
     @Body() CreateAuthDto: ChangePasswordDto,
     @Req() req: Request,
   ) {
-    console.log(req.user!.id);
     const result = await this.authService.changePassword(
       req.user!.id,
       CreateAuthDto.oldPassword,

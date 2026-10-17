@@ -8,4 +8,8 @@ export class CrmService {
   syncProducts() {
     return this.onofficeService.syncFromOnOffice();
   }
+
+  syncStatus() {
+    return this.onofficeService.getSyncStatus();
+  }
 }

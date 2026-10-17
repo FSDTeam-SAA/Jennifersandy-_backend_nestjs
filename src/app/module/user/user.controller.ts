@@ -16,6 +16,7 @@ import {
 import { UserService } from './user.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { UpdateProfileDto } from './dto/update-profile.dto';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { fileUpload } from 'src/app/helpers/fileUploder';
 import {
@@ -252,11 +253,11 @@ export class UserController {
   @ApiConsumes('multipart/form-data')
   @UseGuards(AuthGuard('admin', 'user'))
   @UseInterceptors(FileInterceptor('profilePicture', fileUpload.uploadConfig))
-  @ApiBody({ type: UpdateUserDto })
+  @ApiBody({ type: UpdateProfileDto })
   @HttpCode(HttpStatus.OK)
   async updateProfile(
     @Req() req: Request,
-    @Body() updateUserDto: UpdateUserDto,
+    @Body() updateUserDto: UpdateProfileDto,
     @UploadedFile() file?: Express.Multer.File,
   ) {
     const result = await this.userService.updateMyProfile(
@@ -271,6 +272,8 @@ export class UserController {
   }
 
   @Get(':id')
+  @ApiBearerAuth('access-token')
+  @UseGuards(AuthGuard('admin'))
   @ApiOperation({
     summary: 'Get single user by id',
   })

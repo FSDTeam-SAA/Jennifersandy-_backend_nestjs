@@ -43,6 +43,15 @@ export class Onoffice {
   warmmiete!: number;
 
   @Prop({ default: 0 })
+  miete_pauschal!: number;
+
+  @Prop({ default: '' })
+  miete_pauschal_pro!: string;
+
+  @Prop({ default: '' })
+  mietePauschalProLabel!: string;
+
+  @Prop({ default: 0 })
   kaufpreis!: number;
 
   @Prop({ default: 0 })
@@ -55,10 +64,19 @@ export class Onoffice {
   vermarktungsart!: string;
 
   @Prop({ default: '' })
+  vermarktungsartLabel!: string;
+
+  @Prop({ default: '' })
   objektart!: string;
 
   @Prop({ default: '' })
+  objektartLabel!: string;
+
+  @Prop({ default: '' })
   objekttyp!: string;
+
+  @Prop({ default: '' })
+  objekttypLabel!: string;
 
   // Address
   @Prop({ default: '' })
@@ -103,10 +121,52 @@ export class Onoffice {
   status!: string;
 
   @Prop({ default: '' })
+  statusLabel!: string;
+
+  @Prop({ default: '' })
+  status2!: string;
+
+  @Prop({ default: '' })
+  status2Label!: string;
+
+  @Prop({ default: '' })
+  rentalStatusCode!: string;
+
+  @Prop({ default: false })
+  verkauft!: boolean;
+
+  @Prop({ default: false })
+  reserviert!: boolean;
+
+  @Prop({ default: '' })
+  rentalStatus!: string;
+
+  @Prop({ default: '' })
+  rentalStatusLabel!: string;
+
+  @Prop({ type: Number, default: null })
+  price!: number | null;
+
+  @Prop({ default: 'unknown' })
+  priceType!: string;
+
+  @Prop({ type: String, default: null })
+  pricePeriod!: string | null;
+
+  @Prop({ default: '' })
+  priceLabel!: string;
+
+  @Prop({ default: '' })
   veroeffentlichen!: string;
+
+  @Prop({ default: false })
+  showGoogleMap!: boolean;
 
   @Prop({ type: Date, default: null })
   verfuegbar_ab!: Date | null;
+
+  @Prop({ default: '' })
+  verfuegbarAbText!: string;
 
   // Admin-managed extras (not from CRM)
   @Prop({ default: '' })
