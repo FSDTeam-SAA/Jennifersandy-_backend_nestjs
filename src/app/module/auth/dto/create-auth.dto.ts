@@ -62,6 +62,11 @@ export class ResetPasswordDto {
   @IsString()
   @MinLength(6, { message: 'Password must be at least 6 characters' })
   newPassword!: string;
+
+  @ApiProperty({ description: 'Single-use token returned after OTP verification' })
+  @IsString()
+  @IsNotEmpty()
+  resetToken!: string;
 }
 
 export class ChangePasswordDto {

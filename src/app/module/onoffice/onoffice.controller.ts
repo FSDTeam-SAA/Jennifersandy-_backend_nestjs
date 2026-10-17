@@ -30,12 +30,16 @@ export class OnofficeController {
 
   // ─── Debug: list all available fields in this onOffice account (admin) ─────
   @Get('fields')
-  @ApiOperation({ summary: 'List all available estate fields in this onOffice account (admin/debug)' })
+  @ApiOperation({
+    summary:
+      'List all available estate fields in this onOffice account (admin/debug)',
+  })
   @ApiBearerAuth('access-token')
   @UseGuards(AuthGuard('admin'))
   @HttpCode(HttpStatus.OK)
   async getAvailableFields() {
-    const { fields, defs } = await this.onofficeService.getAvailableEstateFields();
+    const { fields, defs } =
+      await this.onofficeService.getAvailableEstateFields();
     return { count: fields.length, fields, defs };
   }
 
@@ -43,8 +47,22 @@ export class OnofficeController {
   @Get('estates/map')
   @ApiOperation({ summary: 'Get lightweight map pins for all active estates' })
   @HttpCode(HttpStatus.OK)
-  async getMapPins() {
-    const data = await this.onofficeService.getMapPins();
+  async getMapPins(@Req() req: Request) {
+    const filters = pick(req.query, [
+      'searchTerm',
+      'district',
+      'vermarktungsart',
+      'objektart',
+      'status',
+      'minRooms',
+      'maxRooms',
+      'minPrice',
+      'maxPrice',
+      'minArea',
+      'maxArea',
+      'availableFrom',
+    ]);
+    const data = await this.onofficeService.getMapPins(filters);
     return { message: 'Map pins fetched successfully', data };
   }
 
@@ -61,17 +79,52 @@ export class OnofficeController {
   @Get('estates')
   @ApiOperation({ summary: 'Get all active estates from DB with filters' })
   @ApiQuery({ name: 'searchTerm', required: false, type: String })
-  @ApiQuery({ name: 'district', required: false, type: String, description: 'Filter by stadtteil (district)' })
-  @ApiQuery({ name: 'vermarktungsart', required: false, type: String, description: 'miete | kauf' })
+  @ApiQuery({
+    name: 'district',
+    required: false,
+    type: String,
+    description: 'Filter by stadtteil (district)',
+  })
+  @ApiQuery({
+    name: 'vermarktungsart',
+    required: false,
+    type: String,
+    description: 'miete | kauf',
+  })
   @ApiQuery({ name: 'objektart', required: false, type: String })
   @ApiQuery({ name: 'status', required: false, type: String })
   @ApiQuery({ name: 'minRooms', required: false, type: Number })
   @ApiQuery({ name: 'maxRooms', required: false, type: Number })
-  @ApiQuery({ name: 'minPrice', required: false, type: Number, description: 'Min kaltmiete/kaufpreis' })
-  @ApiQuery({ name: 'maxPrice', required: false, type: Number, description: 'Max kaltmiete/kaufpreis' })
-  @ApiQuery({ name: 'minArea', required: false, type: Number, description: 'Min wohnflaeche m²' })
-  @ApiQuery({ name: 'maxArea', required: false, type: Number, description: 'Max wohnflaeche m²' })
-  @ApiQuery({ name: 'availableFrom', required: false, type: String, description: 'ISO date — show properties available on or before this date' })
+  @ApiQuery({
+    name: 'minPrice',
+    required: false,
+    type: Number,
+    description: 'Min kaltmiete/kaufpreis',
+  })
+  @ApiQuery({
+    name: 'maxPrice',
+    required: false,
+    type: Number,
+    description: 'Max kaltmiete/kaufpreis',
+  })
+  @ApiQuery({
+    name: 'minArea',
+    required: false,
+    type: Number,
+    description: 'Min wohnflaeche m²',
+  })
+  @ApiQuery({
+    name: 'maxArea',
+    required: false,
+    type: Number,
+    description: 'Max wohnflaeche m²',
+  })
+  @ApiQuery({
+    name: 'availableFrom',
+    required: false,
+    type: String,
+    description: 'ISO date — show properties available on or before this date',
+  })
   @ApiQuery({ name: 'sortBy', required: false, type: String })
   @ApiQuery({ name: 'sortOrder', required: false, enum: ['asc', 'desc'] })
   @ApiQuery({ name: 'page', required: false, type: Number })
@@ -93,7 +146,10 @@ export class OnofficeController {
       'availableFrom',
     ]);
     const options = pick(req.query, ['page', 'limit', 'sortBy', 'sortOrder']);
-    const result = await this.onofficeService.getEstatesFromDB(filters, options);
+    const result = await this.onofficeService.getEstatesFromDB(
+      filters,
+      options,
+    );
     return {
       message: 'Estates fetched successfully',
       meta: result.meta,
@@ -121,7 +177,10 @@ export class OnofficeController {
     @Param('slug') slug: string,
     @Query('limit') limit?: string,
   ) {
-    const data = await this.onofficeService.getSimilarEstates(slug, limit ? parseInt(limit) : 4);
+    const data = await this.onofficeService.getSimilarEstates(
+      slug,
+      limit ? parseInt(limit) : 4,
+    );
     return { message: 'Similar estates fetched successfully', data };
   }
 
@@ -131,17 +190,25 @@ export class OnofficeController {
   @ApiParam({ name: 'id', type: Number })
   @HttpCode(HttpStatus.OK)
   async getEstateById(@Param('id') id: string) {
-    const result = await this.onofficeService.getEstateByOnofficeId(parseInt(id));
+    const result = await this.onofficeService.getEstateByOnofficeId(
+      parseInt(id),
+    );
     return { message: 'Estate fetched successfully', data: result };
   }
 
   // ─── Admin: update extra fields (amenities, whyChoose, etc.) ────────────────
   @Patch('estates/:id')
-  @ApiOperation({ summary: 'Admin: update extra fields on an estate (amenities, whyChoose, minimumStay, etc.)' })
+  @ApiOperation({
+    summary:
+      'Admin: update extra fields on an estate (amenities, whyChoose, minimumStay, etc.)',
+  })
   @ApiBearerAuth('access-token')
   @UseGuards(AuthGuard('admin'))
   @HttpCode(HttpStatus.OK)
-  async updateEstate(@Param('id') id: string, @Body() updateDto: UpdateOnofficeDto) {
+  async updateEstate(
+    @Param('id') id: string,
+    @Body() updateDto: UpdateOnofficeDto,
+  ) {
     const result = await this.onofficeService.updateEstate(id, updateDto);
     return { message: 'Estate updated successfully', data: result };
   }

@@ -1,6 +1,7 @@
 import {
   Controller,
   Post,
+  Get,
   HttpStatus,
   HttpCode,
   UseGuards,
@@ -13,6 +14,20 @@ import AuthGuard from 'src/app/middlewares/auth.guard';
 @Controller('crm')
 export class CrmController {
   constructor(private readonly crmService: CrmService) {}
+
+  @Get('sync/status')
+  @ApiOperation({
+    summary: 'Read onOffice sync status without starting a sync (admin)',
+  })
+  @ApiBearerAuth('access-token')
+  @UseGuards(AuthGuard('admin'))
+  @HttpCode(HttpStatus.OK)
+  async syncStatus() {
+    return {
+      message: 'CRM sync status fetched successfully',
+      data: await this.crmService.syncStatus(),
+    };
+  }
 
   @Post('sync/onoffice')
   @ApiOperation({ summary: 'Manually trigger full onOffice sync (admin)' })
