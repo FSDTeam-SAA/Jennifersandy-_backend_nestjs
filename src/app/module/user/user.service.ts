@@ -8,6 +8,7 @@ import { fileUpload } from 'src/app/helpers/fileUploder';
 import { IFilterParams } from 'src/app/helpers/pick';
 import paginationHelper, { IOptions } from 'src/app/helpers/pagenation';
 import buildWhereConditions from 'src/app/helpers/buildWhereConditions';
+import { profileFields, UpdateProfileDto } from './dto/update-profile.dto';
 
 const userSearchAbleFields = [
   'fullName',
@@ -74,7 +75,7 @@ export class UserService {
     updateUserDto: UpdateUserDto,
     file?: Express.Multer.File,
   ) {
-    const user = await this.userModel.findById(id);
+    const user = await this.userModel.findById(id).select('+authVersion');
     if (!user) {
       throw new HttpException('User not found', 404);
     }
@@ -82,12 +83,9 @@ export class UserService {
       const uploadedFile = await fileUpload.uploadToCloudinary(file);
       updateUserDto.profilePicture = uploadedFile.url;
     }
-    const updatedUser = await this.userModel.findByIdAndUpdate(
-      id,
-      updateUserDto,
-      { new: true },
-    );
-    return updatedUser;
+    // save() runs password hashing and invalidates older access tokens.
+    user.set(updateUserDto);
+    return user.save();
   }
 
   async deleteUser(id: string) {
@@ -109,7 +107,7 @@ export class UserService {
 
   async updateMyProfile(
     id: string,
-    updateUserDto: UpdateUserDto,
+    updateUserDto: UpdateProfileDto,
     file?: Express.Multer.File,
   ) {
     const user = await this.userModel.findById(id);
@@ -120,8 +118,14 @@ export class UserService {
       const uploadedFile = await fileUpload.uploadToCloudinary(file);
       updateUserDto.profilePicture = uploadedFile.url;
     }
-    const result = await this.userModel.findByIdAndUpdate(id, updateUserDto, {
+    const safeProfile = Object.fromEntries(
+      profileFields
+        .filter((field) => updateUserDto[field] !== undefined)
+        .map((field) => [field, updateUserDto[field]]),
+    );
+    const result = await this.userModel.findByIdAndUpdate(id, { $set: safeProfile }, {
       new: true,
+      runValidators: true,
     });
     return result;
   }
