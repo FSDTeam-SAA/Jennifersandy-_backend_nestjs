@@ -66,3 +66,31 @@ export default function AuthGuard(...roles: string[]): Type<CanActivate> {
   }
   return mixin(AuthGuardImpl);
 }
+
+export function OptionalAuthGuard(): Type<CanActivate> {
+  @Injectable()
+  class OptionalAuthGuardImpl implements CanActivate {
+    constructor(
+      readonly jwtService: JwtService,
+      @InjectModel(User.name) readonly userModel: Model<UserDocument>,
+    ) {}
+
+    async canActivate(context: ExecutionContext): Promise<boolean> {
+      const request = context.switchToHttp().getRequest<Request>();
+      if (!request.headers.authorization) return true;
+      const [scheme, token] = request.headers.authorization.split(' ');
+      if (scheme !== 'Bearer' || !token) throw new HttpException('Unauthorized', 401);
+      const decoded = this.jwtService.verify<JwtPayload>(token, {
+        secret: config.jwt.accessTokenSecret,
+      });
+      const user = await this.userModel.findById(decoded.id).select('+authVersion');
+      if (!user || user.status !== 'active' || user.role !== decoded.role ||
+        (user.authVersion ?? 0) !== (decoded.authVersion ?? 0)) {
+        throw new HttpException('Unauthorized', 401);
+      }
+      request.user = decoded;
+      return true;
+    }
+  }
+  return mixin(OptionalAuthGuardImpl);
+}

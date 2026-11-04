@@ -28,6 +28,12 @@ export class Inquiry {
 
   @Prop({ default: 'new' })
   status!: string;
+
+  @Prop({ default: '' })
+  responseMessage!: string;
+
+  @Prop({ type: Date, default: null })
+  respondedAt!: Date | null;
 }
 
 export const InquirySchema = SchemaFactory.createForClass(Inquiry);

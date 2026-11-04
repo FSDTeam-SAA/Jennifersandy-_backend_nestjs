@@ -58,6 +58,7 @@ describe('account and blog security regressions (no database or network)', () =>
     for (const handler of [
       UserController.prototype.getSingleUser,
       BlogController.prototype.findOneBlog,
+      BlogController.prototype.findAllAdminBlogs,
       BlogController.prototype.createBlog,
       BlogController.prototype.updateBlog,
       BlogController.prototype.remove,
@@ -168,5 +169,41 @@ describe('account and blog security regressions (no database or network)', () =>
     });
     expect(warn.mock.calls[0][0]).not.toContain('secret-token');
     expect(warn.mock.calls[0][0]).not.toContain('private-body');
+  });
+
+  it('excludes the confirmed spam marker from public list results and their total, while retaining search filters', async () => {
+    const query = { skip: jest.fn().mockReturnThis(), limit: jest.fn().mockReturnThis(), sort: jest.fn().mockResolvedValue([]) };
+    const blogModel = { find: jest.fn().mockReturnValue(query), countDocuments: jest.fn().mockResolvedValue(0) };
+    const service = new BlogService(blogModel as any);
+    await service.findAllBlogs({ searchTerm: 'Düsseldorf' }, {});
+    const conditions = blogModel.find.mock.calls[0][0];
+    expect(conditions.isPublished).toBe(true);
+    expect(conditions.$or).toHaveLength(3);
+    expect(conditions.$nor).toHaveLength(3);
+    for (const field of ['title', 'excerpt', 'content']) {
+      const exclusion = conditions.$nor.find((entry: Record<string, RegExp>) => entry[field]);
+      expect(exclusion[field].test('Contact SITEHACK.HAPPENING831@PASSINBOX.COM urgently')).toBe(true);
+      expect(exclusion[field].test('Living in Düsseldorf')).toBe(false);
+    }
+    expect(blogModel.countDocuments).toHaveBeenCalledWith(conditions);
+  });
+
+  it('applies the same spam exclusion to public slug reads', async () => {
+    const blogModel = { findOne: jest.fn().mockResolvedValue(null) };
+    const service = new BlogService(blogModel as any);
+    await expect(service.findBlogBySlug('affected-post')).rejects.toThrow('Blog not found');
+    expect(blogModel.findOne).toHaveBeenCalledWith({
+      slug: 'affected-post', isPublished: true, $nor: expect.any(Array),
+    });
+  });
+
+  it('keeps all drafts and incident records visible to the guarded admin list', async () => {
+    const records = [{ _id: 'spam-evidence', isPublished: true }, { _id: 'draft', isPublished: false }];
+    const query = { skip: jest.fn().mockReturnThis(), limit: jest.fn().mockReturnThis(), sort: jest.fn().mockResolvedValue(records) };
+    const blogModel = { find: jest.fn().mockReturnValue(query), countDocuments: jest.fn().mockResolvedValue(2) };
+    const service = new BlogService(blogModel as any);
+    await expect(service.findAllBlogs({}, {}, true)).resolves.toMatchObject({ data: records, meta: { total: 2 } });
+    expect(blogModel.find).toHaveBeenCalledWith({});
+    expect(Reflect.getMetadata('__guards__', BlogController.prototype.findAllAdminBlogs)).toHaveLength(1);
   });
 });

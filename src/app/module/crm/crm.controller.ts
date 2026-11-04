@@ -36,6 +36,11 @@ export class CrmController {
   @HttpCode(HttpStatus.OK)
   async syncProducts() {
     const result = await this.crmService.syncProducts();
-    return { message: 'CRM sync completed successfully', data: result };
+    return {
+      message: result.complete
+        ? 'CRM sync completed successfully'
+        : 'CRM sync incomplete; publication deactivation was skipped',
+      data: result,
+    };
   }
 }

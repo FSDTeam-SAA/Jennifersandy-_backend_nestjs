@@ -26,24 +26,38 @@ export class DashboardService {
   ) {}
 
   async dashboardOverView() {
-    const totalUser = await this.userModel.countDocuments();
-    const activeUser = await this.userModel.countDocuments({
-      status: 'active',
-    });
-    const suspended = await this.userModel.countDocuments({
-      status: 'suspended',
-    });
-
-    const totalApartment = await this.onofficeModel.countDocuments();
-    const newEnquiry = await this.inquiryModel.countDocuments({ status: 'new' });
-    const blogpost = await this.blogModel.countDocuments();
-
+    const activeEstateConditions = { isActive: true };
+    const availableEstateConditions = {
+      ...activeEstateConditions,
+      verkauft: { $ne: true },
+      reserviert: { $ne: true },
+      rentalStatus: { $nin: ['vermietet', 'rented'] },
+    };
+    const spamMarker = /sitehack\.happening831@passinbox\.com/i;
+    const [totalUser, activeUser, suspended, totalApartment, activeApartment, newEnquiry, blogpost] =
+      await Promise.all([
+        this.userModel.countDocuments(),
+        this.userModel.countDocuments({ status: 'active' }),
+        this.userModel.countDocuments({ status: 'suspended' }),
+        this.onofficeModel.countDocuments(activeEstateConditions),
+        this.onofficeModel.countDocuments(availableEstateConditions),
+        this.inquiryModel.countDocuments({ status: 'new' }),
+        this.blogModel.countDocuments({
+          status: 'published',
+          $nor: [
+            { title: spamMarker },
+            { excerpt: spamMarker },
+            { content: spamMarker },
+          ],
+        }),
+      ]);
 
     return {
       totalUser,
       activeUser,
       suspended,
       totalApartment,
+      activeApartment,
       newEnquiry,
       blogpost,
     };

@@ -16,7 +16,7 @@ import { CreateInquiryDto } from './dto/create-inquiry.dto';
 import { UpdateInquiryDto } from './dto/update-inquiry.dto';
 import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import type { Request } from 'express';
-import AuthGuard from 'src/app/middlewares/auth.guard';
+import AuthGuard, { OptionalAuthGuard } from 'src/app/middlewares/auth.guard';
 import pick from 'src/app/helpers/pick';
 
 @ApiTags('Inquiry')
@@ -26,6 +26,7 @@ export class InquiryController {
 
   // Guests AND logged-in users can submit inquiries
   @Post()
+  @UseGuards(OptionalAuthGuard())
   @ApiOperation({ summary: 'Submit an inquiry (guests allowed)' })
   @HttpCode(HttpStatus.CREATED)
   async createInquiry(@Req() req: Request, @Body() createInquiryDto: CreateInquiryDto) {
@@ -59,28 +60,30 @@ export class InquiryController {
   @Get(':id')
   @ApiOperation({ summary: 'Get inquiry by ID' })
   @HttpCode(HttpStatus.OK)
-  async findInquiryById(@Param('id') id: string) {
-    const result = await this.inquiryService.findInquiryById(id);
+  @ApiBearerAuth('access-token')
+  @UseGuards(AuthGuard('admin', 'user'))
+  async findInquiryById(@Req() req: Request, @Param('id') id: string) {
+    const result = await this.inquiryService.findInquiryById(id, req.user!.id, req.user!.email, req.user!.role);
     return { message: 'Inquiry fetched successfully', data: result };
   }
 
   @Put(':id')
   @ApiOperation({ summary: 'Update inquiry' })
   @ApiBearerAuth('access-token')
-  @UseGuards(AuthGuard('admin', 'user'))
+  @UseGuards(AuthGuard('admin'))
   @HttpCode(HttpStatus.OK)
-  async updateInquiry(@Param('id') id: string, @Body() updateInquiryDto: UpdateInquiryDto) {
-    const result = await this.inquiryService.updateInquiry(id, updateInquiryDto);
+  async updateInquiry(@Req() req: Request, @Param('id') id: string, @Body() updateInquiryDto: UpdateInquiryDto) {
+    const result = await this.inquiryService.updateInquiry(id, updateInquiryDto, req.user!.id, req.user!.email, req.user!.role);
     return { message: 'Inquiry updated successfully', data: result };
   }
 
   @Delete(':id')
-  @ApiOperation({ summary: 'Delete inquiry (admin)' })
+  @ApiOperation({ summary: 'Delete own inquiry or any inquiry as admin' })
   @ApiBearerAuth('access-token')
-  @UseGuards(AuthGuard('admin'))
+  @UseGuards(AuthGuard('admin', 'user'))
   @HttpCode(HttpStatus.OK)
-  async deleteInquiry(@Param('id') id: string) {
-    const result = await this.inquiryService.deleteInquiry(id);
+  async deleteInquiry(@Req() req: Request, @Param('id') id: string) {
+    const result = await this.inquiryService.deleteInquiry(id, req.user!.id, req.user!.email, req.user!.role);
     return { message: 'Inquiry deleted successfully', data: result };
   }
 }

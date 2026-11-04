@@ -9,6 +9,7 @@ import { IFilterParams } from 'src/app/helpers/pick';
 import paginationHelper, { IOptions } from 'src/app/helpers/pagenation';
 import buildWhereConditions from 'src/app/helpers/buildWhereConditions';
 import { Onoffice, OnofficeDocument } from '../onoffice/entities/onoffice.entity';
+import sendMailer from 'src/app/helpers/sendMailer';
 
 @Injectable()
 export class InquiryService {
@@ -32,10 +33,34 @@ export class InquiryService {
     return inquiry;
   }
 
-  async updateInquiry(id: string, updateInquiryDto: UpdateInquiryDto) {
+  private ownsInquiry(inquiry: InquiryDocument, userId: string, email: string, role: string) {
+    return role === 'admin' ||
+      inquiry.user?.toString() === userId ||
+      (!inquiry.user && inquiry.email.toLowerCase() === email.toLowerCase());
+  }
+
+  async updateInquiry(id: string, updateInquiryDto: UpdateInquiryDto, userId: string, email: string, role: string) {
     const inquiry = await this.inquiryModel.findById(id);
     if (!inquiry) throw new HttpException('Inquiry not found', 404);
-    const updated = await this.inquiryModel.findByIdAndUpdate(id, updateInquiryDto, { new: true });
+    if (!this.ownsInquiry(inquiry, userId, email, role)) {
+      throw new HttpException('Forbidden', 403);
+    }
+    if (updateInquiryDto.status === 'responded') {
+      const responseMessage = updateInquiryDto.responseMessage?.trim();
+      if (!responseMessage) throw new HttpException('A response message is required', 400);
+      await sendMailer(inquiry.email, 'Antwort auf Ihre Wohnungsanfrage — 0211wohnen', `
+        <div style="font-family:Arial,sans-serif;line-height:1.6;color:#262626">
+          <h2>Ihre Anfrage bei 0211wohnen</h2>
+          <p>Hallo ${inquiry.firstName},</p>
+          <p>${responseMessage.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</p>
+          <p>Freundliche Grüße<br/>Ihr 0211wohnen Team</p>
+        </div>`);
+      updateInquiryDto.responseMessage = responseMessage;
+    }
+    const updated = await this.inquiryModel.findByIdAndUpdate(id, {
+      ...updateInquiryDto,
+      ...(updateInquiryDto.status === 'responded' ? { respondedAt: new Date() } : {}),
+    }, { new: true, runValidators: true });
     return updated;
   }
 
@@ -44,7 +69,17 @@ export class InquiryService {
     if (!user) throw new HttpException('User not found', 404);
 
     const { limit, page, skip, sortBy, sortOrder } = paginationHelper(options);
-    const extraConditions = user.role !== 'admin' ? { user: user._id } : {};
+    const extraConditions = user.role !== 'admin'
+      ? {
+          $or: [
+            { user: user._id },
+            {
+              user: { $exists: false },
+              email: { $regex: `^${user.email.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, $options: 'i' },
+            },
+          ],
+        }
+      : {};
 
     const whereConditions = buildWhereConditions(
       params,
@@ -56,7 +91,7 @@ export class InquiryService {
       this.inquiryModel
         .find(whereConditions)
         .populate('user', 'firstName lastName email phoneNumber')
-        .populate('onOfficeId', 'objekttitel slug')
+        .populate('onOfficeId', 'objekttitel slug wohnflaeche anzahl_zimmer images titleImage price priceLabel rentalStatusLabel verfuegbarAbText')
         .sort({ [sortBy || 'createdAt']: sortOrder || 'desc' })
         .skip(skip)
         .limit(limit),
@@ -66,15 +101,21 @@ export class InquiryService {
     return { data: inquiries, meta: { page, limit, total } };
   }
 
-  async findInquiryById(id: string) {
+  async findInquiryById(id: string, userId: string, email: string, role: string) {
     const inquiry = await this.inquiryModel.findById(id);
     if (!inquiry) throw new HttpException('Inquiry not found', 404);
+    if (!this.ownsInquiry(inquiry, userId, email, role)) {
+      throw new HttpException('Forbidden', 403);
+    }
     return inquiry;
   }
 
-  async deleteInquiry(id: string) {
+  async deleteInquiry(id: string, userId: string, email: string, role: string) {
     const inquiry = await this.inquiryModel.findById(id);
     if (!inquiry) throw new HttpException('Inquiry not found', 404);
+    if (!this.ownsInquiry(inquiry, userId, email, role)) {
+      throw new HttpException('Forbidden', 403);
+    }
     await this.inquiryModel.findByIdAndDelete(id);
     return { message: 'Inquiry deleted successfully' };
   }

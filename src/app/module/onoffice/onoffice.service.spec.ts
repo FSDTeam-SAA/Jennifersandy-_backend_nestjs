@@ -77,6 +77,8 @@ function estate(id: number, elements: Record<string, any> = {}) {
 }
 
 describe('onOffice publication, prices and sync safety', () => {
+  const originalMarketingPolicy =
+    process.env.ONOFFICE_ALLOWED_MARKETING_STATUSES;
   let service: OnofficeService;
   let http: { post: jest.Mock };
   let model: any;
@@ -97,19 +99,23 @@ describe('onOffice publication, prices and sync safety', () => {
     };
     http = { post: jest.fn() };
     service = new OnofficeService(http as any, model);
-    jest
-      .spyOn(service as any, 'getCredentials')
-      .mockReturnValue({
-        token: 'test',
-        secret: 'test',
-        pictureToken: 'test',
-        pictureSecret: 'test',
-      });
+    jest.spyOn(service as any, 'getCredentials').mockReturnValue({
+      token: 'test',
+      secret: 'test',
+      pictureToken: 'test',
+      pictureSecret: 'test',
+    });
     jest.spyOn(console, 'warn').mockImplementation(() => {});
     jest.spyOn(console, 'error').mockImplementation(() => {});
   });
 
-  afterEach(() => jest.restoreAllMocks());
+  afterEach(() => {
+    jest.restoreAllMocks();
+    if (originalMarketingPolicy === undefined)
+      delete process.env.ONOFFICE_ALLOWED_MARKETING_STATUSES;
+    else
+      process.env.ONOFFICE_ALLOWED_MARKETING_STATUSES = originalMarketingPolicy;
+  });
 
   function mockApi(estates: any[]) {
     http.post.mockImplementation((_url, body) => {
@@ -311,6 +317,58 @@ describe('onOffice publication, prices and sync safety', () => {
     );
   });
 
+  it('preserves the district label supplied by onOffice instead of guessing a district from ZIP or title', async () => {
+    mockApi([
+      estate(1, {
+        regionaler_zusatz: ['indMulti1978Select5941'],
+        plz: '40213',
+        objekttitel: 'Wohnung mit Blick auf den Medienhafen',
+      }),
+    ]);
+    const original = http.post.getMockImplementation()!;
+    http.post.mockImplementation((url, body) => {
+      const action = body.request.actions[0];
+      if (action.resourcetype === 'fields')
+        return of(
+          response([
+            {
+              id: 'estate',
+              elements: {
+                ...fieldDefinitions,
+                regionaler_zusatz: {
+                  type: 'multiselect',
+                  permittedvalues: null,
+                },
+              },
+            },
+          ]),
+        );
+      if (action.parameters.formatoutput)
+        return of(response([estate(1, { regionaler_zusatz: ['Unterbilk'] })]));
+      return original(url, body);
+    });
+    await service.fullSync();
+    expect(model.findOneAndUpdate.mock.calls[0][1].$set.stadtteil).toBe(
+      'Unterbilk',
+    );
+  });
+
+  it('retains zero coordinates but treats invalid coordinates as missing', async () => {
+    mockApi([
+      estate(1, { breitengrad: 'not-a-number', laengengrad: 181 }),
+      estate(2, { breitengrad: 0, laengengrad: '0' }),
+    ]);
+    await service.fullSync();
+    expect(model.findOneAndUpdate.mock.calls[0][1].$set).toMatchObject({
+      breitengrad: null,
+      laengengrad: null,
+    });
+    expect(model.findOneAndUpdate.mock.calls[1][1].$set).toMatchObject({
+      breitengrad: 0,
+      laengengrad: 0,
+    });
+  });
+
   it('never deactivates existing properties after an individual database write fails', async () => {
     mockApi([estate(1), estate(2)]);
     model.findOneAndUpdate.mockRejectedValueOnce(
@@ -413,6 +471,8 @@ describe('onOffice publication, prices and sync safety', () => {
     { minRooms: '-1' },
     { minPrice: '200', maxPrice: '100' },
     { availableFrom: 'bad' },
+    { availableFrom: '2026-02-31' },
+    { availableFrom: '2026-13-01' },
     { vermarktungsart: 'code_unknown' },
   ])('rejects invalid filters %p', async (filters) => {
     await expect(service.getMapPins(filters)).rejects.toThrow();
@@ -424,5 +484,31 @@ describe('onOffice publication, prices and sync safety', () => {
     const expression = model.find.mock.calls[0][0].stadtteil;
     expect(expression.test('District (West)')).toBe(true);
     expect(expression.test('District West')).toBe(false);
+  });
+
+  it('reads sync status without issuing an API request or changing database records', async () => {
+    const syncedAt = new Date('2026-10-16T08:00:00Z');
+    model.findOne = jest
+      .fn()
+      .mockReturnValue({
+        sort: jest
+          .fn()
+          .mockReturnValue({
+            select: jest
+              .fn()
+              .mockReturnValue({
+                lean: jest.fn().mockResolvedValue({ syncedAt }),
+              }),
+          }),
+      });
+    model.countDocuments.mockResolvedValue(137);
+    expect(await service.getSyncStatus()).toEqual({
+      total: 137,
+      syncedAt,
+      syncInProgress: false,
+    });
+    expect(http.post).not.toHaveBeenCalled();
+    expect(model.findOneAndUpdate).not.toHaveBeenCalled();
+    expect(model.updateMany).not.toHaveBeenCalled();
   });
 });

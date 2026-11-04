@@ -28,6 +28,24 @@ import { UpdateOnofficeDto } from './dto/update-onoffice.dto';
 export class OnofficeController {
   constructor(private readonly onofficeService: OnofficeService) {}
 
+  @Get('admin/estates')
+  @ApiOperation({ summary: 'Admin: list all synced estates including hidden/inactive' })
+  @ApiBearerAuth('access-token')
+  @UseGuards(AuthGuard('admin'))
+  async getAdminEstates() {
+    const data = await this.onofficeService.getAdminEstates();
+    return { message: 'Admin estates fetched successfully', data };
+  }
+
+  @Get('admin/estates/:id')
+  @ApiOperation({ summary: 'Admin: get complete estate by database ID' })
+  @ApiBearerAuth('access-token')
+  @UseGuards(AuthGuard('admin'))
+  async getAdminEstateById(@Param('id') id: string) {
+    const data = await this.onofficeService.getAdminEstateById(id);
+    return { message: 'Admin estate fetched successfully', data };
+  }
+
   // ─── Debug: list all available fields in this onOffice account (admin) ─────
   @Get('fields')
   @ApiOperation({
