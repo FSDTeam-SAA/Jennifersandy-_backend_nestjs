@@ -203,14 +203,37 @@ export class OnofficeService {
   }
 
   private parseAvailability(value: any): Date | null {
-    const text = this.toStr(value);
+    const text = this.toStr(value).trim();
     const germanDate = /^(\d{2})\.(\d{2})\.(\d{4})$/.exec(text);
     const iso = germanDate
       ? `${germanDate[3]}-${germanDate[2]}-${germanDate[1]}`
       : text;
-    if (!/^\d{4}-\d{2}-\d{2}(?:T.*)?$/.test(iso)) return null;
+    const parts = /^(\d{4})-(\d{2})-(\d{2})(?:T.*)?$/.exec(iso);
+    if (!parts) return null;
+    const [year, month, day] = parts.slice(1).map(Number);
+    const calendarDate = new Date(Date.UTC(year, month - 1, day));
+    if (
+      calendarDate.getUTCFullYear() !== year ||
+      calendarDate.getUTCMonth() !== month - 1 ||
+      calendarDate.getUTCDate() !== day
+    )
+      return null;
     const date = new Date(iso);
     return Number.isNaN(date.getTime()) ? null : date;
+  }
+
+  private coordinate(
+    value: any,
+    minimum: number,
+    maximum: number,
+  ): number | null {
+    if (value == null || String(value).trim() === '') return null;
+    const coordinate = Number(value);
+    return Number.isFinite(coordinate) &&
+      coordinate >= minimum &&
+      coordinate <= maximum
+      ? coordinate
+      : null;
   }
 
   // Load field definitions from onOffice and cache them in this.fieldDefs
@@ -295,7 +318,7 @@ export class OnofficeService {
     return { fields, defs: this.fieldDefs };
   }
 
-  // ─── Full sync: fetches ALL properties in one call ──────────────────────────
+  // ─── Full sync: validates all eligible pages before applying visibility ─────
   async fullSync() {
     if (this.syncInProgress)
       throw new HttpException('An onOffice sync is already running', 409);
@@ -639,7 +662,10 @@ export class OnofficeService {
           {
             $set: {
               onofficeId: id,
-              slug: this.generateSlug(this.cleanTitle(this.toStr(el.objekttitel)), id),
+              slug: this.generateSlug(
+                this.cleanTitle(this.toStr(el.objekttitel)),
+                id,
+              ),
               objekttitel: this.cleanTitle(this.toStr(el.objekttitel)),
               objektbeschreibung: this.toStr(el.objektbeschreibung),
               lage: this.toStr(el.lage),
@@ -680,13 +706,13 @@ export class OnofficeService {
               veroeffentlichen: '1',
               showGoogleMap: this.toBoolean(el.showGoogleMap),
               // District: try stadtteil first, then regionaler_zusatz (both with label resolution)
-              stadtteil: this.resolveDistrictName(el),
+              stadtteil: this.resolveDistrictName(el, estate.labels),
               ort: this.toStr(el.ort),
               plz: this.toStr(el.plz),
               strasse: this.toStr(el.strasse),
               hausnummer: this.toStr(el.hausnummer),
-              breitengrad: el.breitengrad ? this.toNum(el.breitengrad) : null,
-              laengengrad: el.laengengrad ? this.toNum(el.laengengrad) : null,
+              breitengrad: this.coordinate(el.breitengrad, -90, 90),
+              laengengrad: this.coordinate(el.laengengrad, -180, 180),
               verfuegbar_ab: verfuegbar,
               verfuegbarAbText: this.toStr(el.verfuegbar_ab),
               images,
@@ -749,59 +775,28 @@ export class OnofficeService {
     };
   }
 
-  private resolveDistrictName(el: Record<string, any>): string {
-    const code = this.toStr(el.stadtteil);
-    const CODE_MAP: Record<string, string> = {
-      indMulti1978Select5917: 'Düsseltal',
-      indMulti1978Select5919: 'Flingern',
-      indMulti1978Select5921: 'Düsseltal',
-      indMulti1978Select5923: 'Friedrichstadt',
-      indMulti1978Select5927: 'Medienhafen',
-      indMulti1978Select5929: 'Gerresheim',
-      indMulti1978Select5933: 'Oberbilk',
-      indMulti1978Select5935: 'Pempelfort',
-      indMulti1978Select5937: 'Stadtmitte',
-      indMulti1978Select5939: 'Rath',
-      indMulti1978Select5941: 'Unterbilk',
-      openGeoDb_Region_112745: 'Bilk',
-      openGeoDb_Region_112746: 'Derendorf',
-      openGeoDb_Region_112748: 'Flehe',
-      openGeoDb_Region_112750: 'Golzheim',
-      openGeoDb_Region_112752: 'Hamm',
-      openGeoDb_Region_112753: 'Hassels',
-      openGeoDb_Region_112754: 'Heerdt',
-      openGeoDb_Region_112771: 'Unterbach',
-      openGeoDb_Region_112772: 'Unterrath',
-      openGeoDb_Region_112773: 'Urdenbach',
-      openGeoDb_Region_112776: 'Wersten',
-    };
-    if (el.plz === '40213' || /carlstadt/i.test(this.toStr(el.lage) + ' ' + this.toStr(el.objekttitel))) {
-      return 'Carlstadt';
-    }
-    if (/medienhafen/i.test(this.toStr(el.lage) + ' ' + this.toStr(el.objekttitel))) {
-      return 'Medienhafen';
-    }
-    if (CODE_MAP[code]) return CODE_MAP[code];
-    const resolved = this.resolveLabel('stadtteil', code) || this.resolveLabel('regionaler_zusatz', el.regionaler_zusatz);
-    if (resolved && !/(?:indMulti|ind_Schl_|openGeoDb)/.test(resolved)) return resolved;
-    const ortMatch = this.toStr(el.ort).match(/Düsseldorf\s*\/\s*(.+)/i);
-    if (ortMatch && ortMatch[1]) {
-      const sub = ortMatch[1].trim();
-      return /flingern/i.test(sub) ? 'Flingern' : sub;
-    }
-    if (el.plz === '40219') return 'Unterbilk';
-    if (el.plz === '40477') return 'Pempelfort';
-    if (el.plz === '40223') return 'Bilk';
-    if (el.plz === '40215') return 'Friedrichstadt';
-    if (el.plz === '40476') return 'Derendorf';
-    if (el.plz === '40211') return 'Stadtmitte';
-    return '';
+  private resolveDistrictName(
+    el: Record<string, any>,
+    formatted?: Record<string, any>,
+  ): string {
+    const resolved =
+      this.resolveLabel('stadtteil', el.stadtteil, formatted?.stadtteil) ||
+      this.resolveLabel(
+        'regionaler_zusatz',
+        el.regionaler_zusatz,
+        formatted?.regionaler_zusatz,
+      );
+    return /(?:indMulti\d+Select\d+|ind_Schl_\d+|openGeoDb_\w+)/.test(resolved)
+      ? ''
+      : resolved;
   }
 
   private publishedConditions(): Record<string, any> {
     const statuses = this.allowedMarketingStatuses();
     return {
       isActive: true,
+      isManuallyHidden: { $ne: true },
+      veroeffentlichen: { $in: ['1', 'true'] },
       ...(statuses ? { status2: { $in: statuses } } : {}),
     };
   }
@@ -845,28 +840,8 @@ export class OnofficeService {
         ].map((field) => ({ [field]: regex })),
       });
     }
-    if (params.district) {
-      const d = String(params.district).trim();
-      if (/medienhafen/i.test(d)) {
-        and.push({
-          $or: [
-            { stadtteil: /Medienhafen|Hafen|Unterbilk/i },
-            { lage: /Medienhafen/i },
-            { objekttitel: /Medienhafen/i },
-          ],
-        });
-      } else if (/carlstadt/i.test(d)) {
-        and.push({
-          $or: [
-            { stadtteil: /Carlstadt/i },
-            { lage: /Carlstadt/i },
-            { plz: '40213' },
-          ],
-        });
-      } else {
-        conditions.stadtteil = literalRegex(d);
-      }
-    }
+    if (params.district)
+      conditions.stadtteil = literalRegex(String(params.district).trim());
     if (params.vermarktungsart) {
       if (!['miete', 'kauf'].includes(String(params.vermarktungsart)))
         throw new HttpException('Invalid marketing type', 400);
@@ -1088,5 +1063,15 @@ export class OnofficeService {
     });
     if (!result) throw new HttpException('Estate not found', 404);
     return result;
+  }
+
+  async getAdminEstates() {
+    return this.onofficeModel.find().sort({ syncedAt: -1 }).lean();
+  }
+
+  async getAdminEstateById(id: string) {
+    const estate = await this.onofficeModel.findById(id).lean();
+    if (!estate) throw new HttpException('Estate not found', 404);
+    return estate;
   }
 }

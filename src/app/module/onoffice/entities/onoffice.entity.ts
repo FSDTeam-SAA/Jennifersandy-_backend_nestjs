@@ -215,6 +215,9 @@ export class Onoffice {
   @Prop({ default: true })
   isActive!: boolean;
 
+  @Prop({ default: false })
+  isManuallyHidden!: boolean;
+
   @Prop()
   syncedAt!: Date;
 }
