@@ -797,6 +797,9 @@ export class OnofficeService {
       isActive: true,
       isManuallyHidden: { $ne: true },
       veroeffentlichen: { $in: ['1', 'true'] },
+      vermarktungsart: 'miete',
+      rentalStatus: { $in: ['available', 'vacant', 'partially_vacant'] },
+      objekttitel: { $type: 'string', $ne: '' },
       ...(statuses ? { status2: { $in: statuses } } : {}),
     };
   }
@@ -848,7 +851,13 @@ export class OnofficeService {
       conditions.vermarktungsart = params.vermarktungsart;
     }
     if (params.objektart) conditions.objektart = String(params.objektart);
-    if (params.status) conditions.status = String(params.status);
+    if (params.status) {
+      if (String(params.status) !== 'available')
+        throw new HttpException('Invalid availability status', 400);
+      conditions.rentalStatus = {
+        $in: ['available', 'vacant', 'partially_vacant'],
+      };
+    }
 
     const rooms = range(params.minRooms, params.maxRooms);
     if (Object.keys(rooms).length) conditions.anzahl_zimmer = rooms;

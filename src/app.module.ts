@@ -11,7 +11,6 @@ import { UserModule } from './app/module/user/user.module';
 import { CrmModule } from './app/module/crm/crm.module';
 import { OnofficeModule } from './app/module/onoffice/onoffice.module';
 import { InquiryModule } from './app/module/inquiry/inquiry.module';
-import { BlogModule } from './app/module/blog/blog.module';
 import { LandlordModule } from './app/module/landlord/landlord.module';
 import { FaqModule } from './app/module/faq/faq.module';
 import { DashboardModule } from './app/module/dashboard/dashboard.module';
@@ -27,7 +26,6 @@ import { DashboardModule } from './app/module/dashboard/dashboard.module';
     CrmModule,
     OnofficeModule,
     InquiryModule,
-    BlogModule,
     LandlordModule,
     FaqModule,
     DashboardModule,
